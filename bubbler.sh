@@ -1,4 +1,4 @@
 #!/bin/sh
 
-# todo: use arecord to dump the mic output to stdout,
-# then forward this to the python bubble counter.
+# Pipes the default mic port into the bubble counter script, then timestamps it
+arecord --format=S32_LE --file-type=raw | ./BubbleCounter.py | ./Timestamper.py
