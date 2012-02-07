@@ -64,6 +64,7 @@ class BubbleCounter(object):
 
             if counter % sampleCount == 0:
                 outputFile.write('{count}\n'.format(count=bubbleCount))
+                outputFile.flush()
                 sampleMean  = sampleSum / sampleCount
                 sampleSum   = 0
                 bubbleCount = 0
