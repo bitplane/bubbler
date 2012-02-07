@@ -1,0 +1,9 @@
+# Ignore temporary files created by editors
+*~
+
+# Ignore Python bytecode and coverage files
+*.pyc
+*.cover
+
+# Ignore my own data files
+*.log
