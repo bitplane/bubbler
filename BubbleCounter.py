@@ -31,19 +31,39 @@ class BubbleCounter(object):
                'FLOAT64_BE': ('>d', 8)}
 
     def __init__(self, inputFile=sys.stdin, outputFile=sys.stdout, 
-                 sampleFormat='S32_LE', sampleCount='8000'):
+                 sampleFormat='S32_LE', sampleCount=80000, maxBubbles=50):
 
         (structFormat, sampleSize) = BubbleCounter.FORMATS[sampleFormat]
-        sampleCount = int(sampleCount)
 
         reader = lambda : inputFile.read(sampleSize)
+
+        # Initialize some variables 
+        (counter, sampleSum, sampleMean, sampleMax,
+         lastBubble, bubbleCount) = (0 for i in range(6))
 
         for sample in iter(reader, ''):
             # abort if the sample data is the wrong length
             if len(sample) != sampleSize:
                 break
 
-            print unpack(structFormat, sample)[0]
+            counter   = counter + 1
+            absSample = abs(unpack(structFormat, sample)[0])
+            sampleSum = sampleSum + absSample
+            sampleMax = sampleMax if sampleMax > absSample else absSample
+
+            if counter > lastBubble + (sampleCount / maxBubbles):
+                if absSample > 2**31*0.75:
+                    lastBubble = counter
+                    bubbleCount = bubbleCount + 1
+
+            if counter % sampleCount == 0:
+                sampleMean = sampleSum / sampleCount
+                print 'avg: %.2f%%' % (sampleMean / float(2**31) * 100.0),
+                print ' max: %.2f%%' % (sampleMax / float(2**31) * 100.0),
+                print ' bubbles:', bubbleCount
+                sampleSum  = 0
+                sampleMean = 0
+                bubbleCount = 0
 
 def main():
     """Main entry point into the app"""
@@ -73,7 +93,7 @@ def main():
     parser.add_option('-c', '--count',
                       dest='sampleCount',
                       type=int,
-                      default=8000,
+                      default=80000,
                       help='The number of samples to read before outputting a value. Defaults to 8000.')
 
     (options, args) = parser.parse_args()
