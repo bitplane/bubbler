@@ -7,3 +7,6 @@
 
 # Ignore my own data files
 *.log
+
+# Ignore test samples because they're huge
+*.raw
