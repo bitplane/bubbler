@@ -33,7 +33,8 @@ class BubbleCounter(object):
                'FLOAT64_BE': ('>d', 8)}
 
     def __init__(self, inputFile=sys.stdin, outputFile=sys.stdout, 
-                 sampleFormat='S32_LE', sampleCount=8000, maxBubbles=5):
+                 sampleFormat='S32_LE', sampleCount=8000, maxBubbles=5,
+                 debug=False):
         """Creates a bubble counter.
         todo: docs
         """
