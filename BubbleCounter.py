@@ -49,7 +49,7 @@ class BubbleCounter(object):
             should be one of the string keys held in BubbleCounter.FORMATS
 
         dataFrequency: The number of samples of input data per second. For 
-            example, set this to 8000 for an 8KHZ audio stream.
+            example, set this to 8000 for an 8kHz audio stream.
 
         listenTime: The time in ms that is listened to before each line of 
             output. A sensible value would be 30000 or 60000, as your beer/wine
@@ -197,7 +197,7 @@ def main():
                       dest='dataFrequency',
                       default=8000,
                       type=int,
-                      help='The frequency of the RAW data. Defaults to 8000 (8KHZ).')
+                      help='The frequency of the RAW data. Defaults to 8000 (8kHz).')
 
     parser.add_option('-t', '--time',
                       dest='listenTime',
