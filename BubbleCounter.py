@@ -35,7 +35,7 @@ class BubbleCounter(object):
 
     def __init__(self, inputFile=sys.stdin, outputFile=sys.stdout, 
                  dataFormat='S32_LE', dataFrequency=8000, listenTime=1000, 
-                 minTimeBetweenBubbles=50, debug=False):
+                 minTimeBetweenBubbles=150, debug=False):
         """Creates a bubble counter.
 
         inputFile: The file to read from. This should be a RAW file containing
@@ -137,7 +137,7 @@ class BubbleCounter(object):
                 periodVarianceSum = periodVarianceSum + sampleVariance
 
                 # bubbles are two standard deviations from the mean
-                if lastPeriodStdDev and sqrt(sampleVariance) > lastPeriodStdDev * 2:
+                if sqrt(sampleVariance) > lastPeriodStdDev * 2.0:
                     # This is a bubble, let's elongate it
                     nextBubbleMinSampleCount = lastBubble + self.minSamplesBetweenBubbles
                     lastBubble               = totalSampleCount
@@ -154,9 +154,11 @@ class BubbleCounter(object):
                     # Save this period's stats
                     lastPeriodMean    = periodSum / self.samplesPerPeriod
                     lastPeriodStdDev  = sqrt(periodVarianceSum / self.samplesPerPeriod)
+
                     periodSum         = 0
                     periodVarianceSum = 0
                     periodBubbleCount = 0
+
 
         except IOError:
             pass
@@ -200,13 +202,13 @@ def main():
     parser.add_option('-t', '--time',
                       dest='listenTime',
                       type=int,
-                      default=3000,
+                      default=10000,
                       help='The number of ms to listen for before outputting a value. Defaults to 10000. Depends on the data frequency, not real time.')
 
     parser.add_option('-m', '--min-bubble-gap',
                       dest='minTimeBetweenBubbles',
                       type=int,
-                      default=100,
+                      default=250,
                       help='The minimum amount of time between two bubbles.')
 
     parser.add_option('-d', '--debug',
