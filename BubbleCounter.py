@@ -12,10 +12,11 @@ your beer or wine.
 See bubbler.sh for an example script.
 """
 
-__version__ = '0.1a'
+__version__ = '0.2'
 
 import sys
 
+from math     import sqrt
 from optparse import OptionParser
 from struct   import unpack
 
@@ -33,7 +34,7 @@ class BubbleCounter(object):
                'FLOAT64_BE': ('>d', 8)}
 
     def __init__(self, inputFile=sys.stdin, outputFile=sys.stdout, 
-                 dataFormat='S32_LE', dataFrequency=8000, sampleTime=1000, 
+                 dataFormat='S32_LE', dataFrequency=8000, listenTime=1000, 
                  minTimeBetweenBubbles=50, debug=False):
         """Creates a bubble counter.
 
@@ -50,10 +51,10 @@ class BubbleCounter(object):
         dataFrequency: The number of samples of input data per second. For 
             example, set this to 8000 for an 8KHZ audio stream.
 
-        sampleTime: The time in ms that the data is sampled for before 
-            each line of output. A sensible value would be 30000 or 60000, as 
-            your beer/wine/mead has just about finished fermenting when it 
-            drops to about 2 bubbles per minute.
+        listenTime: The time in ms that is listened to before each line of 
+            output. A sensible value would be 30000 or 60000, as your beer/wine
+            has just about finished fermenting when it drops to about 2 bubbles 
+            per minute.
 
         minTimeBetweenBubbles: The minimum time between two detections that
             will be considered a new bubble (ms). Does a gurgling noise count
@@ -67,13 +68,13 @@ class BubbleCounter(object):
         # so that we can close them in the destructor. 
         self.openedFiles  = []
 
-        if type(inputFile) == string:
+        if type(inputFile) == str:
             self.inputFile = open(inputFile, 'rb')
             self.openedFiles.append(self.inputFile)
         else:
             self.inputFile = inputFile
 
-        if type(outputFile) == string:
+        if type(outputFile) == str:
             self.outputFile = open(outputFile, 'wb')
             self.openedFiles.append(self.outputFile)
         else:
@@ -82,19 +83,24 @@ class BubbleCounter(object):
         # 2) Initialize input data parser
         # Convert arecord's data format name into struct.pack format, 
         # then create a reader that can read the data.
-        (self.dataFormat, self.dataSize) = BubbleCounter.FORMATS[sampleFormat]
+        (self.dataFormat, self.dataSize) = BubbleCounter.FORMATS[dataFormat]
         self.dataFrequency = dataFrequency 
-        self.dataFormat    = dataFormat
         self.dataReader    = lambda : self.inputFile.read(self.dataSize)
 
         # 3) Initialize stuff to do with the bubble counter.
         # In future we should stick a high pass filter in this section
-
-        self.sampleTime            = sampleTime
-        self.minTimeBetweenBubbles = minTimeBetweenBubbles
+        self.listenTime               = listenTime
+        self.minTimeBetweenBubbles    = minTimeBetweenBubbles
+        self.samplesPerPeriod         = (dataFrequency * listenTime) / 1000
+        self.minSamplesBetweenBubbles = (dataFrequency * minTimeBetweenBubbles) / 1000
 
         # 4) Misc
         self.debug = debug
+
+        if debug:
+            for i in self.__dict__.keys():
+                print i, self.__dict__[i]
+            
 
     def __del__(self):
         """Destructor.
@@ -111,37 +117,54 @@ class BubbleCounter(object):
         """
 
         # Initialize loop variables 
-        # counter, sampleSum, sampleMean, sampleMax,
-        # lastBubble, bubbleCount) = (0 for i in range(6))
+        totalSampleCount = periodSum = lastPeriodMean = 0
+        periodVarianceSum = lastPeriodStdDev = 0
+        lastBubble = periodBubbleCount = 0
 
-        sampleMean = sampleCount = 0
-
-        # iterate through the data until we reach the end
-        for rawData in iter(self.dataReader, ''):
-            try:
+        try:
+            # iterate through data in the stream until we reach the end
+            for rawData in iter(self.dataReader, ''):
                 # This unpack may fail at the end of a broken stream
-                sampleValue    = unpack(structFormat, sample)[0]
+                sampleValue = unpack(self.dataFormat, rawData)[0]
                 # Use the absolute value because the average of all points of 
                 # a wave are at 0.0, which isn't very useful.
-                sampleAbs      = abs(sampleValue)
-                sampleVariance = (sampleAbs-sampleMean)**2
-                sampleSum      = sampleSum + abs(sampleValue)
-                sampleCount    = sampleCount + 1
+                sampleAbs        = abs(sampleValue)
+                totalSampleCount = totalSampleCount + 1
 
-                sampleSum = sampleSum + sampleAbs
-            sampleMax = sampleMax if sampleMax > absSample else absSample
+                # gather stats for this time period
+                sampleVariance    = (sampleAbs-lastPeriodMean)**2
+                periodSum         = periodSum + sampleAbs
+                periodVarianceSum = periodVarianceSum + sampleVariance
 
-            if counter > lastBubble + (sampleCount / maxBubbles):
-                if absSample > 2**31*0.75: # todo: proper threshold check here
-                    lastBubble  = counter
-                    bubbleCount = bubbleCount + 1
+                # bubbles are two standard deviations from the mean
+                if lastPeriodStdDev and sqrt(sampleVariance) > lastPeriodStdDev * 2:
+                    # This is a bubble, let's elongate it
+                    nextBubbleMinSampleCount = lastBubble + self.minSamplesBetweenBubbles
+                    lastBubble               = totalSampleCount
 
-            if counter % sampleCount == 0:
-                outputFile.write('{count}\n'.format(count=bubbleCount))
-                outputFile.flush()
-                sampleMean  = sampleSum / sampleCount
-                sampleSum   = 0
-                bubbleCount = 0
+                    # record it only if there's enough of a gap between the bubbles
+                    if totalSampleCount > nextBubbleMinSampleCount:
+                        periodBubbleCount = periodBubbleCount + 1
+
+                # We've reached the end of this time period
+                if totalSampleCount % self.samplesPerPeriod == 0:
+                    self.outputFile.write('{count}\n'.format(count=periodBubbleCount))
+                    # we're a stream tool, remember to flush the output buffer!
+                    self.outputFile.flush()
+                    # Save this period's stats
+                    lastPeriodMean    = periodSum / self.samplesPerPeriod
+                    lastPeriodStdDev  = sqrt(periodVarianceSum / self.samplesPerPeriod)
+                    periodSum         = 0
+                    periodVarianceSum = 0
+                    periodBubbleCount = 0
+
+        except IOError:
+            pass
+        except KeyboardInterrupt:
+            pass
+        except struct.error:
+            # broken stream
+            pass
 
 def main():
     """Main entry point into the app"""
@@ -163,22 +186,28 @@ def main():
     formats.sort()
 
     parser.add_option('-f', '--format',
-                      dest='sampleFormat',
+                      dest='dataFormat',
                       default='S32_LE',
                       choices=formats,
                       help='The format of the RAW data, must be one of {f}. Defaults to S32_LE.'.format(f=', '.join(formats)))
 
-    parser.add_option('-c', '--count',
-                      dest='sampleCount',
-                      type=int,
+    parser.add_option('-q', '--frequency',
+                      dest='dataFrequency',
                       default=8000,
-                      help='The number of samples to read before outputting a value. Defaults to 8000.')
-
-    parser.add_option('-m', '--max-bubbles',
-                      dest='maxBubbles',
                       type=int,
-                      default=5,
-                      help='The maximum number of bubbles to count in the given sample period. Defaults to 5, which at default values can count up to 5 bubbles per second. In reality, if your fermenter is producing this level of CO2 then the bubbles are too damn long to count.')
+                      help='The frequency of the RAW data. Defaults to 8000 (8KHZ).')
+
+    parser.add_option('-t', '--time',
+                      dest='listenTime',
+                      type=int,
+                      default=3000,
+                      help='The number of ms to listen for before outputting a value. Defaults to 10000. Depends on the data frequency, not real time.')
+
+    parser.add_option('-m', '--min-bubble-gap',
+                      dest='minTimeBetweenBubbles',
+                      type=int,
+                      default=100,
+                      help='The minimum amount of time between two bubbles.')
 
     parser.add_option('-d', '--debug',
                       dest='debug',
@@ -188,8 +217,8 @@ def main():
 
     (options, args) = parser.parse_args()
 
-    bubbles = BubbleCounter(**vars(options))
-    bubbles.count()
+    bubbler = BubbleCounter(**vars(options))
+    bubbler.start()
 
 if __name__ == '__main__':
     main()
