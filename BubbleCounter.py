@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 """BubbleCounter by Gaz Davidson 2012.
 
 Takes WAV data from stdin or a file and counts the bubbles heard during 
@@ -12,7 +12,7 @@ your beer or wine.
 See bubbler.sh for an example script.
 """
 
-__version__ = '0.2'
+__version__ = '0.3'
 
 import sys
 
@@ -20,7 +20,7 @@ from math     import sqrt
 from optparse import OptionParser
 from struct   import unpack
 
-class BubbleCounter(object):
+class BubbleCounter:
     """Bubble counting class."""
 
     FORMATS = {'S8':         ('b',  1),
@@ -99,7 +99,7 @@ class BubbleCounter(object):
 
         if debug:
             for i in self.__dict__.keys():
-                print i, self.__dict__[i]
+                print(i, self.__dict__[i])
             
 
     def __del__(self):
@@ -184,7 +184,7 @@ def main():
                       default=sys.stdout,
                       help='The file to write the bubble count to. Defaults to stdout')
 
-    formats = BubbleCounter.FORMATS.keys()
+    formats = list(BubbleCounter.FORMATS.keys())
     formats.sort()
 
     parser.add_option('-f', '--format',
